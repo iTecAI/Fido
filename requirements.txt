@@ -1,0 +1,6 @@
+fastapi
+fastapi-restful
+uvicorn
+fsspec
+requests
+python-podcastindex
