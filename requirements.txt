@@ -4,3 +4,4 @@ uvicorn
 fsspec
 requests
 python-podcastindex
+tinydb
