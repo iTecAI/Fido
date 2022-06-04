@@ -1,3 +1,4 @@
+from inspect import isclass
 import json
 from tinydb import where
 from tinydb.table import Table
@@ -15,6 +16,11 @@ class Resource:
     def _parse_dict(cls, dct: dict):
         ret = {}
         for k, v in dct.items():
+            if k == "__rid__":
+                continue
+            if k == "__uuid__":
+                ret["uuid"] = v
+                continue
             if type(v) == dict:
                 if "__rid__" in v.keys():
                     if v["__rid__"] in globals().keys() and issubclass(globals()[v["__rid__"]], Resource):
@@ -56,7 +62,7 @@ class Resource:
         for k, v in dct.items():
             if k == "__raw__" or k == "__exclude__" or k in self.__exclude__:
                 continue
-            if issubclass(v, Resource):
+            if isclass(v) and issubclass(v, Resource):
                 ret[k] = v.to_dict()
             elif type(v) == dict:
                 ret[k] = self._drill(v)
@@ -71,7 +77,7 @@ class Resource:
         for i in lst:
             if i == "__raw__" or i == "__exclude__" or i in self.__exclude__:
                 continue
-            if issubclass(i, Resource):
+            if isclass(i) and issubclass(i, Resource):
                 ret.append(i.to_dict())
             elif type(i) == dict:
                 ret.append(self._drill(i))
@@ -83,6 +89,14 @@ class Resource:
     def to_dict(self):
         return self._drill(self.__dict__)
     
+    def to_dict_clean(self):
+        old_ex = self.__exclude__
+        self.__exclude__.extend(["__rid__", "__uuid__"])
+        out = self.to_dict()
+        out["uuid"] = self.__uuid__
+        self.__exclude__ = old_ex
+        return out
+    
     @classmethod
     def from_db(cls, table: Table, query: QueryLike, one=True):
         result = table.search(query)
@@ -92,6 +106,7 @@ class Resource:
     
     def save(self, table: Table):
         table.upsert(self.to_dict(), where("__uuid__") == self.__uuid__)
+        return self
 
 
 class Podcast(Resource):
@@ -134,6 +149,21 @@ class Podcast(Resource):
         self.image = image
         self.artwork = artwork
         self.categories = categories
+    
+    @classmethod
+    def from_feed(cls, f: dict):
+        return cls(
+            id=f["id"],
+            title=f["title"],
+            feed_url=f["url"],
+            feed_type=f["contentType"],
+            author=f["author"],
+            link=f["link"],
+            description=f["description"],
+            image=f["image"],
+            artwork=f["artwork"],
+            categories=f["categories"]
+        )
 
         
 
