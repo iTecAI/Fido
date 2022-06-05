@@ -1,11 +1,7 @@
 from .fs import TargetFileSystem
 from .models import *
 from fastapi.responses import JSONResponse
-
-import os, json
-
-def cfg():
-    return json.loads(os.environ["RAW_CONFIG"])
+from .cfg import *
 
 def err(code: int, reason: str = "Just because :)"):
     return JSONResponse(content={

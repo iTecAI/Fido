@@ -1,11 +1,15 @@
-from fastapi import Response
+import mimetypes
+from typing import List
+from fastapi import Query, Request, Response
 from fastapi.routing import APIRouter
-from util import Podcast, cfg, TargetFileSystem, err, suc
+from more_itertools import unzip
+from util import Podcast, PodcastEpisode, cfg, TargetFileSystem, err, suc
 import podcastindex
 import tinydb
 from tinydb import where
 from requests.exceptions import *
 from starlette.status import *
+import string
 
 __all__ = ["router"]
 
@@ -63,4 +67,47 @@ async def get_saved_feeds(uuid: str):
         return suc(cast.to_dict_clean())
     else:
         return err(HTTP_404_NOT_FOUND, f"Failed to locate saved podcast {uuid}")
+
+@router.get("/episodes/{id}")
+async def get_episodes_by_feed_id(id: str):
+    try:
+        raw_data = index.episodesByFeedId(id, max_results=10000)
+    except HTTPError:
+        return err(HTTP_400_BAD_REQUEST, "Failed to get episodes from Index API")
+    except ReadTimeout:
+        return err(HTTP_408_REQUEST_TIMEOUT, "Request to Index API timed out")
+
+    eps = [PodcastEpisode.from_api_item(e) for e in raw_data["items"]]
+    return suc({i.id: i.to_dict_clean() for i in eps})
+
+@router.get("/download/feed/{id}")
+async def download_feed(request: Request, id: str, n: List[int | str] = Query([]), folder: str = None):
+    try:
+        episodes: list[PodcastEpisode] = [PodcastEpisode.from_api_item(e) for e in index.episodesByFeedId(id, max_results=10000)["items"]]
+    except HTTPError:
+        return err(HTTP_400_BAD_REQUEST, "Failed to get episodes from Index API")
+    except ReadTimeout:
+        return err(HTTP_408_REQUEST_TIMEOUT, "Request to Index API timed out")
+    if n and len(n) > 0:
+        episodes = [e for e in episodes if e.episodeNumber in n or e.episodeNumber == None and "null" in n]
+    
+    if not folder:
+        try:
+            raw_data = index.podcastByFeedId(id)
+        except HTTPError:
+            return err(HTTP_400_BAD_REQUEST, "Failed to get feed from Index API")
+        except ReadTimeout:
+            return err(HTTP_408_REQUEST_TIMEOUT, "Request to Index API timed out")
+        
+        if not raw_data["feed"]:
+            return err(HTTP_404_NOT_FOUND, f"Failed to locate feed with id {id}")
+        
+        feed = Podcast.from_feed(raw_data["feed"])
+        folder = [(i if i in string.ascii_letters or i in string.digits or i in "_ (){}[]+-,:;<>=#&!$%" else "-") for i in feed.title].join("")
+    names, fns = unzip([(e.title + str(mimetypes.guess_extension(e.contentType)), e.download) for e in episodes])
+
+    downloads = fs.download(folder, fns=list(fns), names=list(names))
+    return downloads
+    
+
 
