@@ -104,9 +104,9 @@ async def download_feed(request: Request, id: str, n: List[int | str] = Query([]
         
         feed = Podcast.from_feed(raw_data["feed"])
         folder = [(i if i in string.ascii_letters or i in string.digits or i in "_ (){}[]+-,:;<>=#&!$%" else "-") for i in feed.title].join("")
-    names, fns = unzip([(e.title + str(mimetypes.guess_extension(e.contentType)), e.download) for e in episodes])
+    names, resources = unzip([(e.title + str(mimetypes.guess_extension(e.contentType)), e) for e in episodes])
 
-    downloads = fs.download(folder, fns=list(fns), names=list(names))
+    downloads = fs.download(folder, resources=list(resources), names=list(names))
     return downloads
     
 

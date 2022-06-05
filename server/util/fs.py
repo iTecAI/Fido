@@ -3,6 +3,8 @@ from fsspec import AbstractFileSystem
 import importlib
 
 from more_itertools import unzip
+
+from .models import Resource
 from .cfg import cfg
 from tinydb import TinyDB, where
 from time import time
@@ -52,7 +54,7 @@ class TargetFileSystem:
         return self.interface.makedirs(self._path(path), exist_ok=exist_ok)
 
     def _handle_download(
-        self, download: str, id: str, container: str, name: str, fn, args=[], kwargs={}
+        self, download: str, id: str, container: str, name: str, resource: Resource, args=[], kwargs={}
     ):
         self.wait_lock()
         self.locked = True
@@ -65,8 +67,8 @@ class TargetFileSystem:
             (where("download_id") == download) & (where("item_id") == id),
         )
         self.locked = False
-        with self.open(f"{container}/{name}", mode="wb") as f:
-            success, result = fn(f, *args, **kwargs)
+        with self.open(f"{container}/{resource.download_pathprefix()}{name}", mode="wb") as f:
+            success, result = resource.download(f, *args, **kwargs)
 
         if success:
             self.wait_lock()
@@ -85,11 +87,11 @@ class TargetFileSystem:
             )
             self.locked = False
 
-    def download_process(self, did_map, fns, args, kwargs, download_id, container):
+    def download_process(self, did_map, resources, args, kwargs, download_id, container):
         ids, _names = unzip(did_map.items())
         threads = {}
-        for fn, did, name, arg, kwarg in zip(fns, ids, _names, args, kwargs):
-            args = [download_id,did,container,name,fn]
+        for resource, did, name, arg, kwarg in zip(resources, ids, _names, args, kwargs):
+            args = [download_id,did,container,name,resource]
             args.extend(arg)
             t = Thread(target=self._handle_download, args=args, kwargs=kwarg, name="Fido-Download-Item-"+did)
             t.start()
@@ -107,17 +109,17 @@ class TargetFileSystem:
     def download(
         self,
         container: str,
-        fns: list = [],
+        resources: list[Resource] = [],
         names: list[str] = [],
         args: list[list] = None,
         kwargs: list[dict] = None,
     ):
         if args == None:
-            args = [[] for i in range(len(fns))]
+            args = [[] for i in range(len(resources))]
         if kwargs == None:
-            kwargs = [{} for i in range(len(fns))]
-        if not (len(names) == len(args) == len(kwargs) == len(fns)):
-            raise ArgumentError("fns, names, args, and kwargs must be the same length")
+            kwargs = [{} for i in range(len(resources))]
+        if not (len(names) == len(args) == len(kwargs) == len(resources)):
+            raise ArgumentError("resources, names, args, and kwargs must be the same length")
         self.makedirs(container, exist_ok=True)
         download_id = sha256(str(time()).encode("utf-8")).hexdigest()
         did_map = {}
@@ -143,7 +145,7 @@ class TargetFileSystem:
         proc = Thread(
             target=self.download_process,
             name=f"Fido-Downloader-{download_id}",
-            args=[did_map, fns, args, kwargs, download_id, container],
+            args=[did_map, resources, args, kwargs, download_id, container],
         )
         proc.start()
 

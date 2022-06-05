@@ -119,6 +119,12 @@ class Resource:
         table.upsert(self.to_dict(), where("__uuid__") == self.__uuid__)
         return self
 
+    def download(self, fd: FileIO):
+        raise NotImplementedError()
+
+    def download_pathprefix(self):
+        return ""
+
 
 class Podcast(Resource):
     def __init__(
@@ -172,8 +178,6 @@ class Podcast(Resource):
             link=f["link"],
             description=f["description"],
             image=f["image"],
-            artwork=f["artwork"],
-            categories=f["categories"],
         )
 
 
@@ -258,4 +262,7 @@ class PodcastEpisode(Resource):
             return True, {"result": "success", "total_size": size}
         else:
             return False, {"result": "failure", "code": r.status_code, "server_message": str(r.text)}
+
+    def download_pathprefix(self):
+        return f"S{self.episodeSeason}E{self.episodeNumber} - "
 
