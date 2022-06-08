@@ -33,7 +33,7 @@ class TargetFileSystem:
             importlib.import_module(f"fsspec.implementations.{self.module}"),
             self.subclass,
         )(*args, **kwargs)
-    
+
     def wait_lock(self):
         while self.locked:
             pass
@@ -52,9 +52,22 @@ class TargetFileSystem:
 
     def makedirs(self, path: str, exist_ok=False):
         return self.interface.makedirs(self._path(path), exist_ok=exist_ok)
+    
+    def exists(self, path: str, **kwargs):
+        return self.interface.exists(self._path(path), **kwargs)
+    
+    def isdir(self, path: str):
+        return self.interface.isdir(self._path(path))
 
     def _handle_download(
-        self, download: str, id: str, container: str, name: str, resource: Resource, args=[], kwargs={}
+        self,
+        download: str,
+        id: str,
+        container: str,
+        name: str,
+        resource: Resource,
+        args=[],
+        kwargs={},
     ):
         self.wait_lock()
         self.locked = True
@@ -67,7 +80,9 @@ class TargetFileSystem:
             (where("download_id") == download) & (where("item_id") == id),
         )
         self.locked = False
-        with self.open(f"{container}/{resource.download_pathprefix()}{name}", mode="wb") as f:
+        with self.open(
+            f"{container}/{resource.download_pathprefix()}{name}", mode="wb"
+        ) as f:
             success, result = resource.download(f, *args, **kwargs)
 
         if success:
@@ -87,24 +102,32 @@ class TargetFileSystem:
             )
             self.locked = False
 
-    def download_process(self, did_map, resources, args, kwargs, download_id, container):
+    def download_process(
+        self, did_map, resources, args, kwargs, download_id, container
+    ):
         ids, _names = unzip(did_map.items())
         threads = {}
-        for resource, did, name, arg, kwarg in zip(resources, ids, _names, args, kwargs):
-            args = [download_id,did,container,name,resource]
+        for resource, did, name, arg, kwarg in zip(
+            resources, ids, _names, args, kwargs
+        ):
+            args = [download_id, did, container, name, resource]
             args.extend(arg)
-            t = Thread(target=self._handle_download, args=args, kwargs=kwarg, name="Fido-Download-Item-"+did)
+            t = Thread(
+                target=self._handle_download,
+                args=args,
+                kwargs=kwarg,
+                name="Fido-Download-Item-" + did,
+            )
             t.start()
             threads[did] = t
-            if len(threads.keys()) > 16:
-                while len(threads.keys()) > 12:
+            if len(threads.keys()) > 4:
+                while len(threads.keys()) > 4:
                     td = []
                     for k, v in threads.items():
                         if not v.is_alive():
                             td.append(k)
                     for k in td:
                         del threads[k]
-                            
 
     def download(
         self,
@@ -119,7 +142,9 @@ class TargetFileSystem:
         if kwargs == None:
             kwargs = [{} for i in range(len(resources))]
         if not (len(names) == len(args) == len(kwargs) == len(resources)):
-            raise ArgumentError("resources, names, args, and kwargs must be the same length")
+            raise ArgumentError(
+                "resources, names, args, and kwargs must be the same length"
+            )
         self.makedirs(container, exist_ok=True)
         download_id = sha256(str(time()).encode("utf-8")).hexdigest()
         did_map = {}
@@ -150,3 +175,9 @@ class TargetFileSystem:
         proc.start()
 
         return self.db.search(where("download_id") == download_id)
+
+    def clear_old_download_trackers(self):
+        self.db.remove(
+            ((where("type") == "complete") | (where("type") == "error"))
+            & (where("completedTimestamp") < (time() - cfg()["download_entry_clear"]))
+        )

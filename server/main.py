@@ -35,6 +35,11 @@ if not CONFIG["authenticated"]:
 
 app = FastAPI()
 
+@app.on_event("startup")
+@repeat_every(seconds=300)
+def run_repeat_tasks():
+    FS.clear_old_download_trackers()
+
 
 @app.middleware("http")
 async def authenticate(request: Request, call_next):
