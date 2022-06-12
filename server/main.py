@@ -18,7 +18,7 @@ else:
 
 os.environ["RAW_CONFIG"] = json.dumps(CONFIG)
 
-from util import TargetFileSystem, Resource
+from util import TargetFileSystem, Resource, cfg
 from fastapi import FastAPI, Request, Response
 from fastapi.responses import JSONResponse
 from fastapi_restful.tasks import repeat_every
@@ -36,7 +36,7 @@ if not CONFIG["authenticated"]:
 app = FastAPI()
 
 @app.on_event("startup")
-@repeat_every(seconds=300)
+@repeat_every(seconds=cfg()["scan_interval"])
 def run_repeat_tasks():
     FS.clear_old_download_trackers()
 

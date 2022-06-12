@@ -1,5 +1,6 @@
 import mimetypes
 from typing import List
+from xmlrpc.client import boolean
 from fastapi import Query, Request, Response
 from fastapi.routing import APIRouter
 from more_itertools import unzip
@@ -52,6 +53,14 @@ async def save_feed(id: int):
 async def delete_saved_feed(uuid: str):
     removed = table.remove(where("__uuid__") == uuid)
     return suc({"removed": len(removed)})
+
+@router.post("/saved/feeds/{uuid}/fetch")
+async def set_fetch_mode(uuid: str, f: boolean):
+    r = table.update({"autofetch": f}, where("__uuid__") == uuid)
+    if len(r) > 0:
+        return suc(Podcast.from_db(table, where("__uuid__") == uuid).to_dict_clean())
+    else:
+        return err(HTTP_404_NOT_FOUND, reason=f"Saved podcast with UUID {uuid} not found.")
 
 
 @router.get("/saved/feeds")

@@ -1,6 +1,7 @@
 from inspect import isclass
 from io import FileIO
 import json
+from xmlrpc.client import boolean
 from tinydb import where
 from tinydb.table import Table
 from tinydb.queries import QueryLike
@@ -140,6 +141,8 @@ class Podcast(Resource):
         image: str = None,
         artwork: str = None,
         categories: dict = {},
+        autofetch: boolean = False,
+        fetched: list[str] = []
     ):
         super().__init__(
             uuid=uuid,
@@ -153,6 +156,8 @@ class Podcast(Resource):
             image=image,
             artwork=artwork,
             categories=categories,
+            autofetch=autofetch,
+            fetched=fetched
         )
         self.__rid__ = "Podcast"
 
@@ -166,6 +171,8 @@ class Podcast(Resource):
         self.image = image
         self.artwork = artwork
         self.categories = categories
+        self.autofetch = autofetch
+        self.fetched = fetched
 
     @classmethod
     def from_feed(cls, f: dict):
@@ -178,6 +185,8 @@ class Podcast(Resource):
             link=f["link"],
             description=f["description"],
             image=f["image"],
+            autofetch=False,
+            fetched=[]
         )
 
 
